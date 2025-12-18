@@ -18,20 +18,30 @@ public enum GravityDirection
 public class PlayerController : MonoBehaviour
 {
 
+   
+    public Vector3 moveDirection;
+
+    public GameObject DefaultCameraPosition;
+
     public Dictionary<GravityDirection, Vector3> GravityDirectionMap;
     private Rigidbody rb;
     public Transform FollowTarget;
     private Quaternion FinalRoation;
-    public GameObject FlipingIndicator;
+  
     public GameObject VisualParent;
     private Vector3 Right;
-    private bool IsFlipping = false;
+    public bool IsGrounded = true;
+   
+
+    public GameObject HoloGramParent;
+    public bool IsJumping=false;
     
     public float rotationSpeed = 5f; 
     public float verticalAngleLimit = 80f;  
     private float horizontalRotation = 0f;
     private float verticalRotation = 0f;
     public float moveSpeed=0.5f;
+    public float JumpForce=-900;
     public float turnSpeed=0.5f;
     private Vector3 CamForwardPlanar;
     public GameObject FollowCamera;
@@ -46,9 +56,9 @@ public class PlayerController : MonoBehaviour
         Vector3.down
     };
 
-    private Vector3 ChoosenDirection=new Vector3(0,0,1);
+    private Vector3 ChoosenDirection=new Vector3(0,-1,0);
 
-    private Vector3 CurrentGravityDirection=new Vector3(0,0,1);
+    private Vector3 CurrentGravityDirection=new Vector3(0,-1,0);
     private Vector3 ArrowDirection;
     private Vector3 Dir;
     private Vector3 FollowCameraLocalPosition;
@@ -75,21 +85,24 @@ public class PlayerController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        
-        
-     
-     
        
-        
-        
-
-
-        
-        
-
-
-        if (Input.GetKeyDown(KeyCode.G))
+        MovePlayer();
+        Vector3 DirectionToCamera = (FollowCamera.transform.position - FollowTarget.position).normalized;
+        Physics.Raycast(FollowTarget.transform.position, DirectionToCamera, out RaycastHit hitInfo, CameraBoomDistance );
+     if(hitInfo.collider!=null)
         {
+            float distanceToCamera = hitInfo.distance;
+            FollowCamera.transform.position =  Vector3.Lerp(FollowTarget.transform.position,DefaultCameraPosition.transform.position, distanceToCamera / CameraBoomDistance);
+        }
+        else
+        {
+            FollowCamera.transform.position = DefaultCameraPosition.transform.position;
+        }
+     
+     
+        if (Input.GetKeyDown(KeyCode.KeypadEnter)|| Input.GetKeyDown (KeyCode.Return))
+        {
+            HoloGramParent.SetActive(false);
             CurrentGravityDirection=ChoosenDirection;
         }
 
@@ -104,10 +117,10 @@ public class PlayerController : MonoBehaviour
 
      
         
-        rb.AddForce(CurrentGravityDirection*98f);
+      
         
      HandleCameraRotation();
-     MovePlayer();
+
 
   
   
@@ -118,15 +131,28 @@ public class PlayerController : MonoBehaviour
 
       
 
+      CheckForGround();
 
 
+    }
 
+
+    void CheckForGround()
+    {
+        
+        Physics.Raycast(transform.position,CurrentGravityDirection, out RaycastHit hitInfo, 1.35f );
+        IsGrounded= hitInfo.collider != null;
+        if (IsGrounded)
+        {
+            Debug.Log("grounded");
+        }
+        else
+        {
+            Debug.Log("not gorunded");
+        }
     }
     
-    void OnDrawGizmos()
-    {
-        DrawArrow(transform.position, Right, Color.green, 10f);
-    }
+
 
 
     Vector3 CalculateGravityDirection()
@@ -147,10 +173,13 @@ public class PlayerController : MonoBehaviour
          
             if (dotProduct > 0.5)
             {
-              
+                HoloGramParent.transform.up= WorldDirections[i];
+                HoloGramParent.SetActive(true);
                 ChoosenDirection = WorldDirections[i];
                 
+                
                 return WorldDirections[i];
+                
 
             }
         }
@@ -243,41 +272,57 @@ public class PlayerController : MonoBehaviour
         
         
         
-        Vector3 moveDirection= ForwardDir* vertical+(-Right)*horizontal;
+         moveDirection= ForwardDir* vertical+(-Right)*horizontal;
 
         moveDirection.Normalize();
 
         if (moveDirection.magnitude >= 0.1f)
-        {
+        {   
+            if(!IsJumping)
+            {
+            rb.linearVelocity= (moveDirection * moveSpeed);           
+            rb.AddForce(CurrentGravityDirection*980f);
             
-            rb.MovePosition(transform.position + moveDirection * moveSpeed * Time.deltaTime);
-          //  rb.AddForce(moveDirection*100);
-           
-                 Quaternion targetRotation = Quaternion.LookRotation(moveDirection, -CurrentGravityDirection);
+            Quaternion targetRotation = Quaternion.LookRotation(moveDirection, -CurrentGravityDirection);
             VisualParent.transform.rotation=targetRotation;
-         //   rb.linearVelocity = new Vector3(rb.linearVelocity.x * CurrentGravityDirection.x, rb.linearVelocity.y * CurrentGravityDirection.y, rb.linearVelocity.z * CurrentGravityDirection.z);
-         rb.linearVelocity = Vector3.zero;
+         
+            }
         }
+
+      
+        
+        else
+        {
+            if(!IsJumping)
+            rb.linearVelocity = CurrentGravityDirection*9.8f;
+            
+        }
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            if(IsGrounded)
+            {
+            Debug.Log("jump pressed");
+            IsJumping = true;
+            rb.AddForce(CurrentGravityDirection*JumpForce);
+            StopAllCoroutines();
+            StartCoroutine(TurnOffJump());
+            }
+          
+        }   
         
         
         
     }
-    void DrawArrow(Vector3 position, Vector3 direction, Color color, float size = 1f)
+
+    IEnumerator TurnOffJump()
     {
-        Gizmos.color = color;
-
-        Vector3 arrowHead = position + direction.normalized * size;
-
-        Gizmos.DrawLine(position, arrowHead);
-
-        // Draw the arrow head (triangle)
-        float arrowHeadSize = 1f * size;
-        Vector3 arrowHeadLeft = arrowHead - Quaternion.LookRotation(direction) * Vector3.left * arrowHeadSize;
-        Vector3 arrowHeadRight = arrowHead - Quaternion.LookRotation(direction) * Vector3.right * arrowHeadSize;
-
-        Gizmos.DrawLine(arrowHead, arrowHeadLeft);
-        Gizmos.DrawLine(arrowHead, arrowHeadRight);
+        
+        yield return new WaitForSeconds(0.3f);
+        IsJumping = false;
     }
+
+    
+
 
 
 }
