@@ -17,35 +17,7 @@ public enum GravityDirection
 };
 public class PlayerController : MonoBehaviour
 {
-
-   
-    public Vector3 moveDirection;
-
-    public GameObject DefaultCameraPosition;
-
-    public Dictionary<GravityDirection, Vector3> GravityDirectionMap;
-    private Rigidbody rb;
-    public Transform FollowTarget;
-    private Quaternion FinalRoation;
-  
-    public GameObject VisualParent;
-    private Vector3 Right;
-    public bool IsGrounded = true;
-   
-
-    public GameObject HoloGramParent;
-    public bool IsJumping=false;
-    
-    public float rotationSpeed = 5f; 
-    public float verticalAngleLimit = 80f;  
-    private float horizontalRotation = 0f;
-    private float verticalRotation = 0f;
-    public float moveSpeed=0.5f;
-    public float JumpForce=-900;
-    public float turnSpeed=0.5f;
-    private Vector3 CamForwardPlanar;
-    public GameObject FollowCamera;
-    private Vector3 ForwardDir;
+    //world directions to choose from as gravity directions are discreate
     private Vector3[] WorldDirections = new Vector3[]
     {
         Vector3.forward,  
@@ -56,24 +28,51 @@ public class PlayerController : MonoBehaviour
         Vector3.down
     };
 
-    private Vector3 ChoosenDirection=new Vector3(0,-1,0);
-
-    private Vector3 CurrentGravityDirection=new Vector3(0,-1,0);
-    private Vector3 ArrowDirection;
-    private Vector3 Dir;
-    private Vector3 FollowCameraLocalPosition;
+    //Shared variables that need to be access by multiple functions
+  private Rigidbody rb;
+  private Vector3 Right;
+  private float horizontalRotation = 0f;
+  private float verticalRotation = 0f;
+  private Vector3 CamForwardPlanar;
+  private Vector3 ForwardDir;
+  private Vector3 ChoosenDirection=new Vector3(0,-1,0);
+  private Vector3 CurrentGravityDirection=new Vector3(0,-1,0);
+  private Vector3 ArrowDirection;
+  private Vector3 Dir;
+  private Vector3 FollowCameraLocalPosition;
+  private float CameraBoomDistance;
+  private Quaternion FinalRoation;
+  
+  
+  //variables that need to be passed to other scripts (animation controller)
+  public Vector3 moveDirection;
+  public bool IsGrounded = true;
     
     
+  //variables that can be adjusted in inspector and assigned in inspector
+    public GameObject DefaultCameraPosition;
+    public Dictionary<GravityDirection, Vector3> GravityDirectionMap;
+    public Transform FollowTarget;
+    public GameObject VisualParent;
+    public GameObject HoloGramParent;
+    public bool IsJumping=false;
+    public float rotationSpeed = 5f; 
+    public float verticalAngleLimit = 80f;  
+    public float moveSpeed=0.5f;
+    public float JumpForce=-900;
+    public float turnSpeed=0.5f;
+    public GameObject FollowCamera;
+    
 
-    public float CameraBoomDistance;
 
-
+    // Awake is called when the script instance is being loaded so we get all the default variables instead of assigning in the inspector 
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
         CameraBoomDistance= Vector3.Distance(FollowCamera.transform.position, FollowTarget.position);
     }
 
+    
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -87,19 +86,16 @@ public class PlayerController : MonoBehaviour
     {
        
         MovePlayer();
-        Vector3 DirectionToCamera = (FollowCamera.transform.position - FollowTarget.position).normalized;
-        Physics.Raycast(FollowTarget.transform.position, DirectionToCamera, out RaycastHit hitInfo, CameraBoomDistance );
-     if(hitInfo.collider!=null)
-        {
-            float distanceToCamera = hitInfo.distance;
-            FollowCamera.transform.position =  Vector3.Lerp(FollowTarget.transform.position,DefaultCameraPosition.transform.position, distanceToCamera / CameraBoomDistance);
-        }
-        else
-        {
-            FollowCamera.transform.position = DefaultCameraPosition.transform.position;
-        }
-     
-     
+        AdjustCameraboom();
+        CheckAndFlipGravity();
+        HandleCameraRotation();
+        CalculateGravityDirection();
+        CheckForGround();
+        
+    }
+
+    void CheckAndFlipGravity()
+    {
         if (Input.GetKeyDown(KeyCode.KeypadEnter)|| Input.GetKeyDown (KeyCode.Return))
         {
             HoloGramParent.SetActive(false);
@@ -113,27 +109,6 @@ public class PlayerController : MonoBehaviour
         }
         
         CamForwardPlanar = Vector3.Cross(FollowTarget.right,transform.up );
-        
-
-     
-        
-      
-        
-     HandleCameraRotation();
-
-
-  
-  
-
-      CalculateGravityDirection();
-      Debug.Log(ChoosenDirection);
-     
-
-      
-
-      CheckForGround();
-
-
     }
 
 
@@ -142,17 +117,23 @@ public class PlayerController : MonoBehaviour
         
         Physics.Raycast(transform.position,CurrentGravityDirection, out RaycastHit hitInfo, 1.35f );
         IsGrounded= hitInfo.collider != null;
-        if (IsGrounded)
+      
+    }
+
+    void AdjustCameraboom()
+    {
+        Vector3 DirectionToCamera = (FollowCamera.transform.position - FollowTarget.position).normalized;
+        Physics.Raycast(FollowTarget.transform.position, DirectionToCamera, out RaycastHit hitInfo, CameraBoomDistance );
+        if(hitInfo.collider!=null)
         {
-            Debug.Log("grounded");
+            float distanceToCamera = hitInfo.distance;
+            FollowCamera.transform.position =  Vector3.Lerp(FollowTarget.transform.position,DefaultCameraPosition.transform.position, distanceToCamera / CameraBoomDistance);
         }
         else
         {
-            Debug.Log("not gorunded");
+            FollowCamera.transform.position = DefaultCameraPosition.transform.position;
         }
     }
-    
-
 
 
     Vector3 CalculateGravityDirection()
@@ -198,11 +179,11 @@ public class PlayerController : MonoBehaviour
 
         Vector3 gravityDirection =CurrentGravityDirection; 
 
-// Adjust Forward Direction based on gravity
+    // Adjust Forward Direction based on gravity
         Vector3 ForwardDir = FollowTarget.transform.forward;
         ForwardDir.y = 0;  // We ignore the vertical component for movement calculations
 
-// Adapt movement directions when gravity flips (gravity direction should change when gravity is flipped)
+    // Adapt movement directions when gravity flips (gravity direction should change when gravity is flipped)
         if (gravityDirection != Vector3.down) {
             // If gravity is not "down", adjust movement directions accordingly.
             // Here we rotate the forward direction based on gravity direction.
@@ -301,7 +282,7 @@ public class PlayerController : MonoBehaviour
         {
             if(IsGrounded)
             {
-            Debug.Log("jump pressed");
+           
             IsJumping = true;
             rb.AddForce(CurrentGravityDirection*JumpForce);
             StopAllCoroutines();
@@ -314,6 +295,7 @@ public class PlayerController : MonoBehaviour
         
     }
 
+    //disable gravity for a short duration to avoid immediate re-grounding after jump
     IEnumerator TurnOffJump()
     {
         
